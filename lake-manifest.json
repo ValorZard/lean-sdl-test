@@ -1,0 +1,15 @@
+{"version": "1.1.0",
+ "packagesDir": ".lake/packages",
+ "packages":
+ [{"url": "https://github.com/ValorZard/lean-sdl3.git",
+   "type": "git",
+   "subDir": null,
+   "scope": "",
+   "rev": "b8b90dada343e21f76879cd57127bf1dd0e9b99d",
+   "name": "SDL3",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "master",
+   "inherited": false,
+   "configFile": "lakefile.lean"}],
+ "name": "«lean-sdl-test»",
+ "lakeDir": ".lake"}
