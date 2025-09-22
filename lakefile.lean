@@ -12,4 +12,4 @@ lean_lib LeanSdlTest where
 @[default_target]
 lean_exe «lean-sdl-test» where
   root := `Main
-  moreLinkArgs := #["-Wl,--allow-shlib-undefined", "-Wl,-rpath=$ORIGIN"]
+  moreLinkArgs := if !System.Platform.isWindows then #["-Wl,--allow-shlib-undefined", "-Wl,-rpath=$ORIGIN"] else #[]
