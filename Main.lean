@@ -1,4 +1,5 @@
 import LeanSdlTest
+import LeanSdlTest.Engine
 
 def main : IO Unit :=
-  LeanSdlTest.Engine.run
+  Engine.run
