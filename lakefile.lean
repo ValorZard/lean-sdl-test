@@ -16,6 +16,4 @@ lean_exe «lean-sdl-test» where
   moreLinkArgs := #[
     s!"-L{__dir__ / ".lake" / "packages" / "SDL3" / "vendor" / "SDL" / "build"}",
     s!"-L{__dir__ / ".lake" / "packages" / "SDL3" / "vendor" / "SDL_image" / "build"}",
-    "-lSDL3",
-    "-lSDL3_image"
   ]
