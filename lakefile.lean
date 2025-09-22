@@ -12,4 +12,4 @@ lean_lib LeanSdlTest where
 @[default_target]
 lean_exe «lean-sdl-test» where
   root := `Main
-  -- Link with SDL libraries using full paths to the import libraries
+  moreLinkArgs := #["-Wl,--allow-shlib-undefined", "-Wl,-rpath=$ORIGIN"]
