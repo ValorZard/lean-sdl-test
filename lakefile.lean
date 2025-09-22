@@ -13,7 +13,3 @@ lean_lib LeanSdlTest where
 lean_exe «lean-sdl-test» where
   root := `Main
   -- Link with SDL libraries using full paths to the import libraries
-  moreLinkArgs := #[
-    s!"-L{__dir__ / ".lake" / "packages" / "SDL3" / "vendor" / "SDL" / "build"}",
-    s!"-L{__dir__ / ".lake" / "packages" / "SDL3" / "vendor" / "SDL_image" / "build"}",
-  ]
