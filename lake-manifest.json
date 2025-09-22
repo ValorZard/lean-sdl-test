@@ -5,7 +5,7 @@
    "type": "git",
    "subDir": null,
    "scope": "",
-   "rev": "b9ecd4983010390112aed0a637cceeca55328f22",
+   "rev": "fd5a28cb794cea48dc195372013db178bfbc44d0",
    "name": "SDL3",
    "manifestFile": "lake-manifest.json",
    "inputRev": "master",
