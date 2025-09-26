@@ -14,8 +14,8 @@ structure EngineState where
   deltaTime : Float
   lastTime : UInt32
   running : Bool
-  playerX : Int32
-  playerY : Int32
+  playerX : Float
+  playerY : Float
   texture : SDL.SDLTexture
   font : SDL.SDLFont
   mixer : SDL.SDLMixer
@@ -47,7 +47,7 @@ def renderScene (state : EngineState) : IO Unit := do
   let _ ← SDL.renderClear state.renderer
 
   setColor state.renderer { r := 255, g := 0, b := 0 }
-  fillRect state.renderer state.playerX state.playerY 100 100
+  fillRect state.renderer state.playerX.toInt32 state.playerY.toInt32 100 100
 
   let _ ← SDL.renderTexture state.renderer state.texture 500 150 64 64
 
@@ -62,14 +62,16 @@ def renderScene (state : EngineState) : IO Unit := do
 private def updateEngineState (engineState : IO.Ref EngineState) : IO Unit := do
   let state ← engineState.get
   let currentTime ← SDL.getTicks
+  -- in seconds
   let deltaTime := (currentTime - state.lastTime).toFloat / 1000.0
 
   let mut playerX := state.playerX
   let mut playerY := state.playerY
-  if ← isKeyDown .A then playerX := playerX - 1
-  if ← isKeyDown .D then playerX := playerX + 1
-  if ← isKeyDown .W then playerY := playerY - 1
-  if ← isKeyDown .S then playerY := playerY + 1
+  let speed := 200.0
+  if ← isKeyDown .A then playerX := playerX - (speed * deltaTime)
+  if ← isKeyDown .D then playerX := playerX + (speed * deltaTime)
+  if ← isKeyDown .W then playerY := playerY - (speed * deltaTime)
+  if ← isKeyDown .S then playerY := playerY + (speed * deltaTime)
   engineState.set { state with deltaTime, lastTime := currentTime, playerX, playerY }
 
 partial def gameLoop (engineState : IO.Ref EngineState) : IO Unit := do
@@ -175,7 +177,7 @@ partial def run : IO Unit := do
   let initialState : EngineState := {
     window := window, renderer := renderer
     deltaTime := 0.0, lastTime := 0, running := true
-    playerX := (SCREEN_WIDTH / 2), playerY := (SCREEN_HEIGHT / 2)
+    playerX := (SCREEN_WIDTH / 2).toFloat, playerY := (SCREEN_HEIGHT / 2).toFloat
     texture := texture, mixer := mixer, track := track, audio := audio, font := font
   }
 
