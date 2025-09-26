@@ -16,11 +16,12 @@ structure EngineState where
   running : Bool
   playerX : Float
   playerY : Float
+  playerSpeedY : Float := 0.0
+  jumpStrength : Float := -300.0
+  gravity : Float := 5.0
+  terminalVelocity : Float := 500.0
   texture : SDL.SDLTexture
   font : SDL.SDLFont
-  mixer : SDL.SDLMixer
-  track : SDL.SDLTrack
-  audio : SDL.SDLAudio
 
 def SCREEN_WIDTH : Int32 := 1280
 def SCREEN_HEIGHT : Int32 := 720
@@ -51,7 +52,7 @@ def renderScene (state : EngineState) : IO Unit := do
 
   let _ ← SDL.renderTexture state.renderer state.texture 500 150 64 64
 
-  let message := "Hello, Lean SDL!"
+  let message := s!"Frames Per Second: {1 / state.deltaTime}s"
   let textSurface ← SDL.textToSurface state.renderer state.font message 50 50 255 255 255 255
   let textTexture ← SDL.createTextureFromSurface state.renderer textSurface
   let textWidth ← SDL.getTextureWidth textTexture
@@ -64,15 +65,20 @@ private def updateEngineState (engineState : IO.Ref EngineState) : IO Unit := do
   let currentTime ← SDL.getTicks
   -- in seconds
   let deltaTime := (currentTime - state.lastTime).toFloat / 1000.0
-
-  let mut playerX := state.playerX
+  let mut speed := state.playerSpeedY + (state.gravity * deltaTime)
   let mut playerY := state.playerY
-  let speed := 200.0
-  if ← isKeyDown .A then playerX := playerX - (speed * deltaTime)
-  if ← isKeyDown .D then playerX := playerX + (speed * deltaTime)
-  if ← isKeyDown .W then playerY := playerY - (speed * deltaTime)
-  if ← isKeyDown .S then playerY := playerY + (speed * deltaTime)
-  engineState.set { state with deltaTime, lastTime := currentTime, playerX, playerY }
+
+  if playerY > (SCREEN_HEIGHT - 100).toFloat then
+    playerY := (SCREEN_HEIGHT - 100).toFloat
+    speed := 0.0
+
+  if ← isKeyDown .Space then speed := state.jumpStrength
+
+  speed := speed + (state.gravity)
+
+  playerY := playerY + (speed * deltaTime)
+
+  engineState.set { state with deltaTime, lastTime := currentTime, playerY, playerSpeedY := speed }
 
 partial def gameLoop (engineState : IO.Ref EngineState) : IO Unit := do
   updateEngineState engineState
@@ -80,15 +86,6 @@ partial def gameLoop (engineState : IO.Ref EngineState) : IO Unit := do
   let eventType ← SDL.pollEvent
   if eventType == SDL.SDL_QUIT || (← isKeyDown .Escape) then
     engineState.modify (fun s => { s with running := false })
-
-  if eventType == SDL.SDL_MOUSEBUTTONDOWN then
-    let (mouseX, mouseY) ← SDL.getMousePos
-    if ← SDL.isLeftMousePressed then
-      IO.println s!"Left click at ({mouseX}, {mouseY})"
-    if ← SDL.isRightMousePressed then
-      IO.println s!"Right click at ({mouseX}, {mouseY})"
-    if ← SDL.isMiddleMousePressed then
-      IO.println s!"Middle click at ({mouseX}, {mouseY})"
 
   let state ← engineState.get
   if state.running then
@@ -139,46 +136,11 @@ partial def run : IO Unit := do
     SDL.quit
     return
 
-  let mixer ← try
-    SDL.createMixer ()
-  catch sdlError =>
-    IO.println sdlError
-    SDL.quit
-    return
-
-  let track ← try
-    SDL.createTrack mixer
-  catch sdlError =>
-    IO.println sdlError
-    SDL.quit
-    return
-
-  let audio ← try
-    SDL.loadAudio mixer "assets/In_The_Dark_Flashes.mp3"
-  catch sdlError =>
-    IO.println sdlError
-    SDL.quit
-    return
-
-  match (← SDL.setTrackAudio track audio) with
-  | true => pure ()
-  | false =>
-    IO.println s!"Failed to set track audio"
-    SDL.quit
-    return
-
-  match (← SDL.playTrack track) with
-  | true => pure ()
-  | false =>
-    IO.println s!"Failed to play track"
-    SDL.quit
-    return
-
   let initialState : EngineState := {
     window := window, renderer := renderer
     deltaTime := 0.0, lastTime := 0, running := true
     playerX := (SCREEN_WIDTH / 2).toFloat, playerY := (SCREEN_HEIGHT / 2).toFloat
-    texture := texture, mixer := mixer, track := track, audio := audio, font := font
+    texture := texture, font := font
   }
 
   let engineState ← IO.mkRef initialState
