@@ -93,8 +93,8 @@ private def physicsStep (state : EngineState) : IO EngineState := do
   let mut player := state.player
 
   -- collision with ground
-  if player.y > (SCREEN_HEIGHT - 100).toFloat then
-    player := { player with y := (SCREEN_HEIGHT - 100).toFloat }
+  if player.y > SCREEN_HEIGHT.toFloat - player.height then
+    player := { player with y := SCREEN_HEIGHT.toFloat - player.height }
     speed := 0.0
 
   let mut score := state.score
@@ -130,7 +130,13 @@ private def physicsStep (state : EngineState) : IO EngineState := do
   let mut wallSpawnTimer := state.wallSpawnTimer + physicsDeltaTime
   if wallSpawnTimer >= state.wallSpawnInterval then
     let wallHeight : Int32 := (← IO.rand 100 400).toInt32
-    walls := walls ++ [{ x := SCREEN_WIDTH.toFloat, y := (SCREEN_HEIGHT - wallHeight).toFloat, width := 100.0, height := wallHeight.toFloat }]
+    let gapHeight  : Int32 := (← IO.rand 200 300).toInt32
+    walls := walls ++ [
+      -- top wall
+      { x := SCREEN_WIDTH.toFloat, y := 0.0, width := 100.0, height := (SCREEN_HEIGHT - (wallHeight + gapHeight)).toFloat },
+      -- bottom wall
+      { x := SCREEN_WIDTH.toFloat, y := (SCREEN_HEIGHT - wallHeight).toFloat, width := 100.0, height := wallHeight.toFloat }
+    ]
     wallSpawnTimer := 0
 
   -- move walls to the left
@@ -223,7 +229,7 @@ partial def run : IO Unit := do
   let initialState : EngineState := {
     window := window, renderer := renderer
     deltaTime := 0.0, frameStart := 0, running := true
-    player := { x := 100.0, y := 0, width := 100.0, height := 100.0 }
+    player := { x := 100.0, y := 0, width := 50.0, height := 50.0 }
     texture := texture, font := font
   }
 
