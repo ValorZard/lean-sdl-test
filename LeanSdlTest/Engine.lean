@@ -32,6 +32,11 @@ structure EngineState where
   jumpStrength : Float := -20.0
   gravity : Float := 1.0
   terminalVelocity : Float := 500.0
+  wallSpeed : Float := 5.0
+  walls : List AABBCollision := [{ x := 1300.0, y := 400.0, width := 50.0, height := 200.0 },
+                             { x := 1600.0, y := 300.0, width := 50.0, height := 300.0 },
+                             { x := 1900.0, y := 500.0, width := 50.0, height := 100.0 }]
+  isColliding : Bool := false
   texture : SDL.SDLTexture
   font : SDL.SDLFont
 
@@ -64,7 +69,11 @@ def renderScene (state : EngineState) : IO Unit := do
 
   let _ ← SDL.renderTexture state.renderer state.texture 500 150 64 64
 
-  let message := s!"Accumulated Time: {state.accumulatedTime}ms"
+  for wall in state.walls do
+    setColor state.renderer { r := 0, g := 255, b := 0 }
+    fillRect state.renderer wall.x.toInt32 wall.y.toInt32 wall.width.toInt32 wall.height.toInt32
+
+  let message := s!"Is Colliding: {state.isColliding}"
   let textSurface ← SDL.textToSurface state.renderer state.font message 50 50 255 255 255 255
   let textTexture ← SDL.createTextureFromSurface state.renderer textSurface
   let textWidth ← SDL.getTextureWidth textTexture
@@ -90,7 +99,17 @@ private def physicsStep (state : EngineState) : IO EngineState := do
 
   playerY := playerY + speed
 
-  return { state with player := { state.player with y := playerY }, playerSpeedY := speed }
+  -- move walls to the left
+  let walls := state.walls.map (fun wall => { wall with x := wall.x - state.wallSpeed })
+
+  -- collision
+  let mut isColliding := false
+  for wall in walls do
+    if aabbIntersects state.player wall then
+      isColliding := true
+      break
+
+  return { state with player := { state.player with y := playerY }, playerSpeedY := speed, isColliding, walls}
 
 -- using this article for the fixed time step
 -- https://code.tutsplus.com/how-to-create-a-custom-2d-physics-engine-the-core-engine--gamedev-7493t
