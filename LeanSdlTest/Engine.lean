@@ -34,9 +34,9 @@ structure EngineState where
   gravity : Float := 1.0
   terminalVelocity : Float := 500.0
   wallSpeed : Float := 5.0
-  walls : List AABBCollision := [{ x := 1300.0, y := 400.0, width := 50.0, height := 200.0 },
-                             { x := 1600.0, y := 300.0, width := 50.0, height := 300.0 },
-                             { x := 1900.0, y := 500.0, width := 50.0, height := 100.0 }]
+  walls : List AABBCollision := []
+  wallSpawnTimer : UInt64 := 0
+  wallSpawnInterval : UInt64 := 2000 -- in milliseconds
   isColliding : Bool := false
   texture : SDL.SDLTexture
   font : SDL.SDLFont
@@ -100,8 +100,16 @@ private def physicsStep (state : EngineState) : IO EngineState := do
 
   playerY := playerY + speed
 
+  -- add new walls
+  let mut walls := state.walls
+  let mut wallSpawnTimer := state.wallSpawnTimer + physicsDeltaTime
+  if wallSpawnTimer >= state.wallSpawnInterval then
+    let wallHeight : Int32 := 400
+    walls := walls ++ [{ x := SCREEN_WIDTH.toFloat, y := (SCREEN_HEIGHT - wallHeight).toFloat, width := 100.0, height := wallHeight.toFloat }]
+    wallSpawnTimer := 0
+
   -- move walls to the left
-  let mut walls := state.walls.map (fun wall => { wall with x := wall.x - state.wallSpeed })
+  walls := walls.map (fun wall => { wall with x := wall.x - state.wallSpeed })
   -- delete walls that are off screen
   walls := walls.filter (fun wall => wall.x + wall.width > -100)
 
@@ -112,7 +120,7 @@ private def physicsStep (state : EngineState) : IO EngineState := do
       isColliding := true
       break
 
-  return { state with player := { state.player with y := playerY }, playerSpeedY := speed, isColliding, walls }
+  return { state with player := { state.player with y := playerY }, playerSpeedY := speed, isColliding, walls, wallSpawnTimer }
 
 -- using this article for the fixed time step
 -- https://code.tutsplus.com/how-to-create-a-custom-2d-physics-engine-the-core-engine--gamedev-7493t
