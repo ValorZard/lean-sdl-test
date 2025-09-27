@@ -29,6 +29,7 @@ structure EngineState where
   running : Bool
   player : AABBCollision
   playerSpeedY : Float := 0.0
+  -- negative is up in SDL
   jumpStrength : Float := -20.0
   gravity : Float := 1.0
   terminalVelocity : Float := 500.0
@@ -100,7 +101,9 @@ private def physicsStep (state : EngineState) : IO EngineState := do
   playerY := playerY + speed
 
   -- move walls to the left
-  let walls := state.walls.map (fun wall => { wall with x := wall.x - state.wallSpeed })
+  let mut walls := state.walls.map (fun wall => { wall with x := wall.x - state.wallSpeed })
+  -- delete walls that are off screen
+  walls := walls.filter (fun wall => wall.x + wall.width > -100)
 
   -- collision
   let mut isColliding := false
@@ -109,7 +112,7 @@ private def physicsStep (state : EngineState) : IO EngineState := do
       isColliding := true
       break
 
-  return { state with player := { state.player with y := playerY }, playerSpeedY := speed, isColliding, walls}
+  return { state with player := { state.player with y := playerY }, playerSpeedY := speed, isColliding, walls }
 
 -- using this article for the fixed time step
 -- https://code.tutsplus.com/how-to-create-a-custom-2d-physics-engine-the-core-engine--gamedev-7493t
@@ -190,7 +193,7 @@ partial def run : IO Unit := do
   let initialState : EngineState := {
     window := window, renderer := renderer
     deltaTime := 0.0, frameStart := 0, running := true
-    player := { x := (SCREEN_WIDTH / 2).toFloat, y := (SCREEN_HEIGHT / 2).toFloat, width := 100.0, height := 100.0 }
+    player := { x := (SCREEN_WIDTH / 2).toFloat, y := 0, width := 100.0, height := 100.0 }
     texture := texture, font := font
   }
 
