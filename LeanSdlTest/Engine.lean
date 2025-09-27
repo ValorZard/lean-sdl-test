@@ -8,19 +8,40 @@ structure Color where
   b : UInt8
   a : UInt8 := 255
 
+-- AABB Collision is really easy to write
+structure AABBCollision where
+  x : Float
+  y : Float
+  width : Float
+  height : Float
+
+def aabbIntersects (a b : AABBCollision) : Bool :=
+  let collisionX := a.x + a.width >= b.x && b.x + b.width >= a.x
+  let collisionY := a.y + a.height >= b.y && b.y + b.height >= a.y
+  collisionX && collisionY
+
 structure EngineState where
   window : SDL.SDLWindow
   renderer : SDL.SDLRenderer
   deltaTime : Float
-  lastTime : UInt32
+  frameStart : UInt64 := 0
+  accumulatedTime : UInt64 := 0
   running : Bool
-  playerX : Float
-  playerY : Float
+  player : AABBCollision
+  playerSpeedY : Float := 0.0
+  -- negative is up in SDL
+  jumpStrength : Float := -20.0
+  gravity : Float := 1.0
+  terminalVelocity : Float := 500.0
+  wallSpeed : Float := 5.0
+  walls : List AABBCollision := []
+  wallSpawnTimer : UInt64 := 0
+  wallSpawnInterval : UInt64 := 2000 -- in milliseconds
+  isColliding : Bool := false
+  score : Nat := 0
+  highScore : Nat := 0
   texture : SDL.SDLTexture
   font : SDL.SDLFont
-  mixer : SDL.SDLMixer
-  track : SDL.SDLTrack
-  audio : SDL.SDLAudio
 
 def SCREEN_WIDTH : Int32 := 1280
 def SCREEN_HEIGHT : Int32 := 720
@@ -47,11 +68,15 @@ def renderScene (state : EngineState) : IO Unit := do
   let _ ← SDL.renderClear state.renderer
 
   setColor state.renderer { r := 255, g := 0, b := 0 }
-  fillRect state.renderer state.playerX.toInt32 state.playerY.toInt32 100 100
+  fillRect state.renderer state.player.x.toInt32 state.player.y.toInt32 state.player.width.toInt32 state.player.height.toInt32
 
   let _ ← SDL.renderTexture state.renderer state.texture 500 150 64 64
 
-  let message := "Hello, Lean SDL!"
+  for wall in state.walls do
+    setColor state.renderer { r := 0, g := 255, b := 0 }
+    fillRect state.renderer wall.x.toInt32 wall.y.toInt32 wall.width.toInt32 wall.height.toInt32
+
+  let message := s!"Score: {state.score} High Score: {state.highScore}"
   let textSurface ← SDL.textToSurface state.renderer state.font message 50 50 255 255 255 255
   let textTexture ← SDL.createTextureFromSurface state.renderer textSurface
   let textWidth ← SDL.getTextureWidth textTexture
@@ -59,20 +84,91 @@ def renderScene (state : EngineState) : IO Unit := do
   let _ ← SDL.renderTexture state.renderer textTexture 50 50 textWidth textHeight
   pure ()
 
-private def updateEngineState (engineState : IO.Ref EngineState) : IO Unit := do
-  let state ← engineState.get
-  let currentTime ← SDL.getTicks
-  -- in seconds
-  let deltaTime := (currentTime - state.lastTime).toFloat / 1000.0
+def physicsFramesPerSecond : Float := 60.0
+def physicsDeltaTime : UInt64 := ((1.0 / physicsFramesPerSecond) * 1000.0).toUInt64 -- in milliseconds
+def maxAccumulatedTime : UInt64 := 2500
 
-  let mut playerX := state.playerX
-  let mut playerY := state.playerY
-  let speed := 200.0
-  if ← isKeyDown .A then playerX := playerX - (speed * deltaTime)
-  if ← isKeyDown .D then playerX := playerX + (speed * deltaTime)
-  if ← isKeyDown .W then playerY := playerY - (speed * deltaTime)
-  if ← isKeyDown .S then playerY := playerY + (speed * deltaTime)
-  engineState.set { state with deltaTime, lastTime := currentTime, playerX, playerY }
+private def physicsStep (state : EngineState) : IO EngineState := do
+  let mut speed := state.playerSpeedY + state.gravity
+  let mut player := state.player
+
+  -- collision with ground
+  if player.y > SCREEN_HEIGHT.toFloat - player.height then
+    player := { player with y := SCREEN_HEIGHT.toFloat - player.height }
+    speed := 0.0
+
+  let mut score := state.score
+  -- add new walls
+  let mut walls := state.walls
+   -- collision
+  let mut isColliding := false
+  for wall in walls do
+    if aabbIntersects player wall then
+      isColliding := true
+      break
+
+  -- collision with ceiling
+  if player.y < 0.0 then
+    player := { player with y := 0.0 }
+    isColliding := true
+
+  -- reset score on collision
+  let mut highScore := state.highScore
+  if isColliding then
+    if score > highScore then
+      highScore := score
+    score := 0
+
+  -- game logic
+  if (← isKeyDown .Space) then speed := state.jumpStrength
+
+  speed := speed + state.gravity
+
+  player := { player with y := player.y + speed }
+
+  -- add new walls
+  let mut wallSpawnTimer := state.wallSpawnTimer + physicsDeltaTime
+  if wallSpawnTimer >= state.wallSpawnInterval then
+    let wallHeight : Int32 := (← IO.rand 100 400).toInt32
+    let gapHeight  : Int32 := (← IO.rand 200 300).toInt32
+    walls := walls ++ [
+      -- top wall
+      { x := SCREEN_WIDTH.toFloat, y := 0.0, width := 100.0, height := (SCREEN_HEIGHT - (wallHeight + gapHeight)).toFloat },
+      -- bottom wall
+      { x := SCREEN_WIDTH.toFloat, y := (SCREEN_HEIGHT - wallHeight).toFloat, width := 100.0, height := wallHeight.toFloat }
+    ]
+    wallSpawnTimer := 0
+
+  -- move walls to the left
+  walls := walls.map (fun wall => { wall with x := wall.x - state.wallSpeed })
+  -- delete walls that are off screen
+  let newWalls := walls.filter (fun wall => wall.x + wall.width > -100)
+
+  score := score + (walls.length - newWalls.length)
+
+  walls := newWalls
+
+  return { state with player, playerSpeedY := speed, isColliding, walls, wallSpawnTimer, score, highScore }
+
+-- using this article for the fixed time step
+-- https://code.tutsplus.com/how-to-create-a-custom-2d-physics-engine-the-core-engine--gamedev-7493t
+private def updateEngineState (engineState : IO.Ref EngineState) : IO Unit := do
+  let mut state ← engineState.get
+  let currentTime ← SDL.getTicks
+  -- get the time elapsed since last frame in milliseconds
+  let mut accumulatedTime := state.accumulatedTime + (currentTime - state.frameStart)
+  -- update the frame start time to now
+  let frameStart := currentTime
+
+  -- if we somehow accumulated too much time, clamp it
+  if accumulatedTime > maxAccumulatedTime then
+    accumulatedTime := maxAccumulatedTime
+
+  while (accumulatedTime >= physicsDeltaTime) do
+    state ← physicsStep state
+    accumulatedTime := accumulatedTime - physicsDeltaTime
+
+  engineState.set { state with frameStart, accumulatedTime }
 
 partial def gameLoop (engineState : IO.Ref EngineState) : IO Unit := do
   updateEngineState engineState
@@ -80,15 +176,6 @@ partial def gameLoop (engineState : IO.Ref EngineState) : IO Unit := do
   let eventType ← SDL.pollEvent
   if eventType == SDL.SDL_QUIT || (← isKeyDown .Escape) then
     engineState.modify (fun s => { s with running := false })
-
-  if eventType == SDL.SDL_MOUSEBUTTONDOWN then
-    let (mouseX, mouseY) ← SDL.getMousePos
-    if ← SDL.isLeftMousePressed then
-      IO.println s!"Left click at ({mouseX}, {mouseY})"
-    if ← SDL.isRightMousePressed then
-      IO.println s!"Right click at ({mouseX}, {mouseY})"
-    if ← SDL.isMiddleMousePressed then
-      IO.println s!"Middle click at ({mouseX}, {mouseY})"
 
   let state ← engineState.get
   if state.running then
@@ -139,46 +226,11 @@ partial def run : IO Unit := do
     SDL.quit
     return
 
-  let mixer ← try
-    SDL.createMixer ()
-  catch sdlError =>
-    IO.println sdlError
-    SDL.quit
-    return
-
-  let track ← try
-    SDL.createTrack mixer
-  catch sdlError =>
-    IO.println sdlError
-    SDL.quit
-    return
-
-  let audio ← try
-    SDL.loadAudio mixer "assets/In_The_Dark_Flashes.mp3"
-  catch sdlError =>
-    IO.println sdlError
-    SDL.quit
-    return
-
-  match (← SDL.setTrackAudio track audio) with
-  | true => pure ()
-  | false =>
-    IO.println s!"Failed to set track audio"
-    SDL.quit
-    return
-
-  match (← SDL.playTrack track) with
-  | true => pure ()
-  | false =>
-    IO.println s!"Failed to play track"
-    SDL.quit
-    return
-
   let initialState : EngineState := {
     window := window, renderer := renderer
-    deltaTime := 0.0, lastTime := 0, running := true
-    playerX := (SCREEN_WIDTH / 2).toFloat, playerY := (SCREEN_HEIGHT / 2).toFloat
-    texture := texture, mixer := mixer, track := track, audio := audio, font := font
+    deltaTime := 0.0, frameStart := 0, running := true
+    player := { x := 100.0, y := 0, width := 50.0, height := 50.0 }
+    texture := texture, font := font
   }
 
   let engineState ← IO.mkRef initialState
