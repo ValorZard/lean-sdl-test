@@ -38,6 +38,8 @@ structure EngineState where
   wallSpawnTimer : UInt64 := 0
   wallSpawnInterval : UInt64 := 2000 -- in milliseconds
   isColliding : Bool := false
+  score : Nat := 0
+  highScore : Nat := 0
   texture : SDL.SDLTexture
   font : SDL.SDLFont
 
@@ -74,7 +76,7 @@ def renderScene (state : EngineState) : IO Unit := do
     setColor state.renderer { r := 0, g := 255, b := 0 }
     fillRect state.renderer wall.x.toInt32 wall.y.toInt32 wall.width.toInt32 wall.height.toInt32
 
-  let message := s!"Is Colliding: {state.isColliding}"
+  let message := s!"Score: {state.score} High Score: {state.highScore}"
   let textSurface ← SDL.textToSurface state.renderer state.font message 50 50 255 255 255 255
   let textTexture ← SDL.createTextureFromSurface state.renderer textSurface
   let textWidth ← SDL.getTextureWidth textTexture
@@ -88,39 +90,59 @@ def maxAccumulatedTime : UInt64 := 2500
 
 private def physicsStep (state : EngineState) : IO EngineState := do
   let mut speed := state.playerSpeedY + state.gravity
-  let mut playerY := state.player.y
+  let mut player := state.player
 
-  if playerY > (SCREEN_HEIGHT - 100).toFloat then
-    playerY := (SCREEN_HEIGHT - 100).toFloat
+  -- collision with ground
+  if player.y > (SCREEN_HEIGHT - 100).toFloat then
+    player := { player with y := (SCREEN_HEIGHT - 100).toFloat }
     speed := 0.0
 
+  let mut score := state.score
+  -- add new walls
+  let mut walls := state.walls
+   -- collision
+  let mut isColliding := false
+  for wall in walls do
+    if aabbIntersects player wall then
+      isColliding := true
+      break
+
+  -- collision with ceiling
+  if player.y < 0.0 then
+    player := { player with y := 0.0 }
+    isColliding := true
+
+  -- reset score on collision
+  let mut highScore := state.highScore
+  if isColliding then
+    if score > highScore then
+      highScore := score
+    score := 0
+
+  -- game logic
   if (← isKeyDown .Space) then speed := state.jumpStrength
 
   speed := speed + state.gravity
 
-  playerY := playerY + speed
+  player := { player with y := player.y + speed }
 
   -- add new walls
-  let mut walls := state.walls
   let mut wallSpawnTimer := state.wallSpawnTimer + physicsDeltaTime
   if wallSpawnTimer >= state.wallSpawnInterval then
-    let wallHeight : Int32 := 400
+    let wallHeight : Int32 := (← IO.rand 100 400).toInt32
     walls := walls ++ [{ x := SCREEN_WIDTH.toFloat, y := (SCREEN_HEIGHT - wallHeight).toFloat, width := 100.0, height := wallHeight.toFloat }]
     wallSpawnTimer := 0
 
   -- move walls to the left
   walls := walls.map (fun wall => { wall with x := wall.x - state.wallSpeed })
   -- delete walls that are off screen
-  walls := walls.filter (fun wall => wall.x + wall.width > -100)
+  let newWalls := walls.filter (fun wall => wall.x + wall.width > -100)
 
-  -- collision
-  let mut isColliding := false
-  for wall in walls do
-    if aabbIntersects state.player wall then
-      isColliding := true
-      break
+  score := score + (walls.length - newWalls.length)
 
-  return { state with player := { state.player with y := playerY }, playerSpeedY := speed, isColliding, walls, wallSpawnTimer }
+  walls := newWalls
+
+  return { state with player, playerSpeedY := speed, isColliding, walls, wallSpawnTimer, score, highScore }
 
 -- using this article for the fixed time step
 -- https://code.tutsplus.com/how-to-create-a-custom-2d-physics-engine-the-core-engine--gamedev-7493t
@@ -201,7 +223,7 @@ partial def run : IO Unit := do
   let initialState : EngineState := {
     window := window, renderer := renderer
     deltaTime := 0.0, frameStart := 0, running := true
-    player := { x := (SCREEN_WIDTH / 2).toFloat, y := 0, width := 100.0, height := 100.0 }
+    player := { x := 100.0, y := 0, width := 100.0, height := 100.0 }
     texture := texture, font := font
   }
 
