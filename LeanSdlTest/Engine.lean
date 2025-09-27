@@ -12,13 +12,14 @@ structure EngineState where
   window : SDL.SDLWindow
   renderer : SDL.SDLRenderer
   deltaTime : Float
-  lastTime : UInt32
+  frameStart : UInt64 := 0
+  accumulatedTime : UInt64 := 0
   running : Bool
   playerX : Float
   playerY : Float
   playerSpeedY : Float := 0.0
-  jumpStrength : Float := -300.0
-  gravity : Float := 5.0
+  jumpStrength : Float := -20.0
+  gravity : Float := 1.0
   terminalVelocity : Float := 500.0
   texture : SDL.SDLTexture
   font : SDL.SDLFont
@@ -52,7 +53,7 @@ def renderScene (state : EngineState) : IO Unit := do
 
   let _ ← SDL.renderTexture state.renderer state.texture 500 150 64 64
 
-  let message := s!"Frames Per Second: {1 / state.deltaTime}s"
+  let message := s!"Accumulated Time: {state.accumulatedTime}ms"
   let textSurface ← SDL.textToSurface state.renderer state.font message 50 50 255 255 255 255
   let textTexture ← SDL.createTextureFromSurface state.renderer textSurface
   let textWidth ← SDL.getTextureWidth textTexture
@@ -60,25 +61,45 @@ def renderScene (state : EngineState) : IO Unit := do
   let _ ← SDL.renderTexture state.renderer textTexture 50 50 textWidth textHeight
   pure ()
 
-private def updateEngineState (engineState : IO.Ref EngineState) : IO Unit := do
-  let state ← engineState.get
-  let currentTime ← SDL.getTicks
-  -- in seconds
-  let deltaTime := (currentTime - state.lastTime).toFloat / 1000.0
-  let mut speed := state.playerSpeedY + (state.gravity * deltaTime)
+def physicsFramesPerSecond : Float := 60.0
+def physicsDeltaTime : UInt64 := ((1.0 / physicsFramesPerSecond) * 1000.0).toUInt64 -- in milliseconds
+def maxAccumulatedTime : UInt64 := 2500
+
+private def physicsStep (state : EngineState) : IO EngineState := do
+  let mut speed := state.playerSpeedY + state.gravity
   let mut playerY := state.playerY
 
   if playerY > (SCREEN_HEIGHT - 100).toFloat then
     playerY := (SCREEN_HEIGHT - 100).toFloat
     speed := 0.0
 
-  if ← isKeyDown .Space then speed := state.jumpStrength
+  if (← isKeyDown .Space) then speed := state.jumpStrength
 
-  speed := speed + (state.gravity)
+  speed := speed + state.gravity
 
-  playerY := playerY + (speed * deltaTime)
+  playerY := playerY + speed
 
-  engineState.set { state with deltaTime, lastTime := currentTime, playerY, playerSpeedY := speed }
+  return { state with playerY, playerSpeedY := speed }
+
+-- using this article for the fixed time step
+-- https://code.tutsplus.com/how-to-create-a-custom-2d-physics-engine-the-core-engine--gamedev-7493t
+private def updateEngineState (engineState : IO.Ref EngineState) : IO Unit := do
+  let mut state ← engineState.get
+  let currentTime ← SDL.getTicks
+  -- get the time elapsed since last frame in milliseconds
+  let mut accumulatedTime := state.accumulatedTime + (currentTime - state.frameStart)
+  -- update the frame start time to now
+  let frameStart := currentTime
+
+  -- if we somehow accumulated too much time, clamp it
+  if accumulatedTime > maxAccumulatedTime then
+    accumulatedTime := maxAccumulatedTime
+
+  while (accumulatedTime >= physicsDeltaTime) do
+    state ← physicsStep state
+    accumulatedTime := accumulatedTime - physicsDeltaTime
+
+  engineState.set { state with frameStart, accumulatedTime }
 
 partial def gameLoop (engineState : IO.Ref EngineState) : IO Unit := do
   updateEngineState engineState
@@ -138,7 +159,7 @@ partial def run : IO Unit := do
 
   let initialState : EngineState := {
     window := window, renderer := renderer
-    deltaTime := 0.0, lastTime := 0, running := true
+    deltaTime := 0.0, frameStart := 0, running := true
     playerX := (SCREEN_WIDTH / 2).toFloat, playerY := (SCREEN_HEIGHT / 2).toFloat
     texture := texture, font := font
   }
