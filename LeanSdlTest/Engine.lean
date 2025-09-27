@@ -8,6 +8,18 @@ structure Color where
   b : UInt8
   a : UInt8 := 255
 
+-- AABB Collision is really easy to write
+structure AABBCollision where
+  x : Float
+  y : Float
+  width : Float
+  height : Float
+
+def aabbIntersects (a b : AABBCollision) : Bool :=
+  let collisionX := a.x + a.width >= b.x && b.x + b.width >= a.x
+  let collisionY := a.y + a.height >= b.y && b.y + b.height >= a.y
+  collisionX && collisionY
+
 structure EngineState where
   window : SDL.SDLWindow
   renderer : SDL.SDLRenderer
@@ -15,8 +27,7 @@ structure EngineState where
   frameStart : UInt64 := 0
   accumulatedTime : UInt64 := 0
   running : Bool
-  playerX : Float
-  playerY : Float
+  player : AABBCollision
   playerSpeedY : Float := 0.0
   jumpStrength : Float := -20.0
   gravity : Float := 1.0
@@ -49,7 +60,7 @@ def renderScene (state : EngineState) : IO Unit := do
   let _ ← SDL.renderClear state.renderer
 
   setColor state.renderer { r := 255, g := 0, b := 0 }
-  fillRect state.renderer state.playerX.toInt32 state.playerY.toInt32 100 100
+  fillRect state.renderer state.player.x.toInt32 state.player.y.toInt32 state.player.width.toInt32 state.player.height.toInt32
 
   let _ ← SDL.renderTexture state.renderer state.texture 500 150 64 64
 
@@ -67,7 +78,7 @@ def maxAccumulatedTime : UInt64 := 2500
 
 private def physicsStep (state : EngineState) : IO EngineState := do
   let mut speed := state.playerSpeedY + state.gravity
-  let mut playerY := state.playerY
+  let mut playerY := state.player.y
 
   if playerY > (SCREEN_HEIGHT - 100).toFloat then
     playerY := (SCREEN_HEIGHT - 100).toFloat
@@ -79,7 +90,7 @@ private def physicsStep (state : EngineState) : IO EngineState := do
 
   playerY := playerY + speed
 
-  return { state with playerY, playerSpeedY := speed }
+  return { state with player := { state.player with y := playerY }, playerSpeedY := speed }
 
 -- using this article for the fixed time step
 -- https://code.tutsplus.com/how-to-create-a-custom-2d-physics-engine-the-core-engine--gamedev-7493t
@@ -160,7 +171,7 @@ partial def run : IO Unit := do
   let initialState : EngineState := {
     window := window, renderer := renderer
     deltaTime := 0.0, frameStart := 0, running := true
-    playerX := (SCREEN_WIDTH / 2).toFloat, playerY := (SCREEN_HEIGHT / 2).toFloat
+    player := { x := (SCREEN_WIDTH / 2).toFloat, y := (SCREEN_HEIGHT / 2).toFloat, width := 100.0, height := 100.0 }
     texture := texture, font := font
   }
 
