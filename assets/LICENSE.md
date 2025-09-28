@@ -4,3 +4,6 @@ Jess Stacy "In The Dark-Flashes"
 Written by Bix Beiderbeck (1903-1931)
 From https://www.openmusicarchive.org
 Public Domain
+
+Flappy Bird Assets from:
+https://megacrash.itch.io/flappy-bird-assets

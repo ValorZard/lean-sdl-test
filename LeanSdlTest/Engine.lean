@@ -29,18 +29,19 @@ structure EngineState where
   running : Bool
   player : AABBCollision
   playerSpeedY : Float := 0.0
+  playerTexture : SDL.SDLTexture
   -- negative is up in SDL
   jumpStrength : Float := -20.0
   gravity : Float := 1.0
   terminalVelocity : Float := 500.0
   wallSpeed : Float := 5.0
   walls : List AABBCollision := []
+  wallTexture : SDL.SDLTexture
   wallSpawnTimer : UInt64 := 0
   wallSpawnInterval : UInt64 := 2000 -- in milliseconds
   isColliding : Bool := false
   score : Nat := 0
   highScore : Nat := 0
-  texture : SDL.SDLTexture
   font : SDL.SDLFont
 
 def SCREEN_WIDTH : Int32 := 1280
@@ -68,13 +69,11 @@ def renderScene (state : EngineState) : IO Unit := do
   let _ ← SDL.renderClear state.renderer
 
   setColor state.renderer { r := 255, g := 0, b := 0 }
-  fillRect state.renderer state.player.x.toInt32 state.player.y.toInt32 state.player.width.toInt32 state.player.height.toInt32
-
-  let _ ← SDL.renderEntireTexture state.renderer state.texture 500 150 64 64
+  let _ <- SDL.renderTexture state.renderer state.playerTexture 0 0 16 16 state.player.x.toInt64 state.player.y.toInt64 state.player.width.toInt64 state.player.height.toInt64
 
   for wall in state.walls do
     setColor state.renderer { r := 0, g := 255, b := 0 }
-    fillRect state.renderer wall.x.toInt32 wall.y.toInt32 wall.width.toInt32 wall.height.toInt32
+    let _ <- SDL.renderTexture state.renderer state.wallTexture 0 0 32 40 wall.x.toInt64 wall.y.toInt64 wall.width.toInt64 wall.height.toInt64
 
   let message := s!"Score: {state.score} High Score: {state.highScore}"
   let textSurface ← SDL.textToSurface state.renderer state.font message 50 50 255 255 255 255
@@ -202,8 +201,15 @@ partial def run : IO Unit := do
     SDL.quit
     return
 
-  let texture ← try
-    SDL.loadImageTexture renderer "assets/wall.png"
+  let playerTexture ← try
+    SDL.loadImageTexture renderer "assets/FlappyBirdAssets/Player/StyleBird1/Bird1-1.png"
+  catch sdlError =>
+    IO.println sdlError
+    SDL.quit
+    return
+
+  let wallTexture ← try
+    SDL.loadImageTexture renderer "assets/FlappyBirdAssets/Tiles/Style 1/PipeStyle1.png"
   catch sdlError =>
     IO.println sdlError
     SDL.quit
@@ -230,7 +236,7 @@ partial def run : IO Unit := do
     window := window, renderer := renderer
     deltaTime := 0.0, frameStart := 0, running := true
     player := { x := 100.0, y := 0, width := 50.0, height := 50.0 }
-    texture := texture, font := font
+    playerTexture, font, wallTexture
   }
 
   let engineState ← IO.mkRef initialState
