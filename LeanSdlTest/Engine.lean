@@ -35,7 +35,8 @@ structure EngineState where
   gravity : Float := 1.0
   terminalVelocity : Float := 500.0
   wallSpeed : Float := 5.0
-  walls : List AABBCollision := []
+  topWalls : List AABBCollision := []
+  bottomWalls : List AABBCollision := []
   wallTexture : SDL.SDLTexture
   wallSpawnTimer : UInt64 := 0
   wallSpawnInterval : UInt64 := 2000 -- in milliseconds
@@ -71,9 +72,14 @@ def renderScene (state : EngineState) : IO Unit := do
   setColor state.renderer { r := 255, g := 0, b := 0 }
   let _ <- SDL.renderTexture state.renderer state.playerTexture 0 0 16 16 state.player.x.toInt64 state.player.y.toInt64 state.player.width.toInt64 state.player.height.toInt64
 
-  for wall in state.walls do
+  for wall in state.bottomWalls do
     setColor state.renderer { r := 0, g := 255, b := 0 }
     let _ <- SDL.renderTexture state.renderer state.wallTexture 0 0 32 40 wall.x.toInt64 wall.y.toInt64 wall.width.toInt64 wall.height.toInt64
+
+  for wall in state.topWalls do
+    setColor state.renderer { r := 0, g := 255, b := 0 }
+    let _ <- SDL.renderTexture state.renderer state.wallTexture 0 40 32 40 wall.x.toInt64 wall.y.toInt64 wall.width.toInt64 wall.height.toInt64
+
 
   let message := s!"Score: {state.score} High Score: {state.highScore}"
   let textSurface ← SDL.textToSurface state.renderer state.font message 50 50 255 255 255 255
@@ -98,10 +104,11 @@ private def physicsStep (state : EngineState) : IO EngineState := do
 
   let mut score := state.score
   -- add new walls
-  let mut walls := state.walls
+  let mut bottomWalls := state.bottomWalls
+  let mut topWalls := state.topWalls
    -- collision
   let mut isColliding := false
-  for wall in walls do
+  for wall in bottomWalls ++ topWalls do
     if aabbIntersects player wall then
       isColliding := true
       break
@@ -130,24 +137,29 @@ private def physicsStep (state : EngineState) : IO EngineState := do
   if wallSpawnTimer >= state.wallSpawnInterval then
     let wallHeight : Int32 := (← IO.rand 100 400).toInt32
     let gapHeight  : Int32 := (← IO.rand 200 300).toInt32
-    walls := walls ++ [
+    topWalls := topWalls ++ [
       -- top wall
       { x := SCREEN_WIDTH.toFloat, y := 0.0, width := 100.0, height := (SCREEN_HEIGHT - (wallHeight + gapHeight)).toFloat },
-      -- bottom wall
+    ]
+    bottomWalls := bottomWalls ++ [
       { x := SCREEN_WIDTH.toFloat, y := (SCREEN_HEIGHT - wallHeight).toFloat, width := 100.0, height := wallHeight.toFloat }
     ]
     wallSpawnTimer := 0
 
   -- move walls to the left
-  walls := walls.map (fun wall => { wall with x := wall.x - state.wallSpeed })
+  bottomWalls := bottomWalls.map (fun wall => { wall with x := wall.x - state.wallSpeed })
+  topWalls := topWalls.map (fun wall => { wall with x := wall.x - state.wallSpeed })
   -- delete walls that are off screen
-  let newWalls := walls.filter (fun wall => wall.x + wall.width > -100)
+  let newBottomWalls := bottomWalls.filter (fun wall => wall.x + wall.width > -100)
+  let newTopWalls := topWalls.filter (fun wall => wall.x + wall.width > -100)
 
-  score := score + (walls.length - newWalls.length)
+  -- only count score of bottom walls to avoid double counting
+  score := score + (bottomWalls.length - newBottomWalls.length)
 
-  walls := newWalls
+  bottomWalls := newBottomWalls
+  topWalls := newTopWalls
 
-  return { state with player, playerSpeedY := speed, isColliding, walls, wallSpawnTimer, score, highScore }
+  return { state with player, playerSpeedY := speed, isColliding, bottomWalls, topWalls, wallSpawnTimer, score, highScore }
 
 -- using this article for the fixed time step
 -- https://code.tutsplus.com/how-to-create-a-custom-2d-physics-engine-the-core-engine--gamedev-7493t
