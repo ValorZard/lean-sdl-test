@@ -34,12 +34,12 @@ structure EngineState where
   jumpStrength : Float := -20.0
   gravity : Float := 1.0
   terminalVelocity : Float := 500.0
-  wallSpeed : Float := 5.0
-  topWalls : List AABBCollision := []
-  bottomWalls : List AABBCollision := []
-  wallTexture : SDL.SDLTexture
-  wallSpawnTimer : UInt64 := 0
-  wallSpawnInterval : UInt64 := 2000 -- in milliseconds
+  pipeSpeed : Float := 5.0
+  topPipes : List AABBCollision := []
+  bottomPipes : List AABBCollision := []
+  pipeTexture : SDL.SDLTexture
+  pipeSpawnTimer : UInt64 := 0
+  pipeSpawnInterval : UInt64 := 2000 -- in milliseconds
   isColliding : Bool := false
   score : Nat := 0
   highScore : Nat := 0
@@ -72,13 +72,13 @@ def renderScene (state : EngineState) : IO Unit := do
   setColor state.renderer { r := 255, g := 0, b := 0 }
   let _ <- SDL.renderTexture state.renderer state.playerTexture 0 0 16 16 state.player.x.toInt64 state.player.y.toInt64 state.player.width.toInt64 state.player.height.toInt64
 
-  for wall in state.bottomWalls do
+  for pipe in state.bottomPipes do
     setColor state.renderer { r := 0, g := 255, b := 0 }
-    let _ <- SDL.renderTexture state.renderer state.wallTexture 0 0 32 40 wall.x.toInt64 wall.y.toInt64 wall.width.toInt64 wall.height.toInt64
+    let _ <- SDL.renderTexture state.renderer state.pipeTexture 0 0 32 40 pipe.x.toInt64 pipe.y.toInt64 pipe.width.toInt64 pipe.height.toInt64
 
-  for wall in state.topWalls do
+  for pipe in state.topPipes do
     setColor state.renderer { r := 0, g := 255, b := 0 }
-    let _ <- SDL.renderTexture state.renderer state.wallTexture 0 40 32 40 wall.x.toInt64 wall.y.toInt64 wall.width.toInt64 wall.height.toInt64
+    let _ <- SDL.renderTexture state.renderer state.pipeTexture 0 40 32 40 pipe.x.toInt64 pipe.y.toInt64 pipe.width.toInt64 pipe.height.toInt64
 
 
   let message := s!"Score: {state.score} High Score: {state.highScore}"
@@ -103,13 +103,13 @@ private def physicsStep (state : EngineState) : IO EngineState := do
     speed := 0.0
 
   let mut score := state.score
-  -- add new walls
-  let mut bottomWalls := state.bottomWalls
-  let mut topWalls := state.topWalls
+  -- add new pipes
+  let mut bottomPipes := state.bottomPipes
+  let mut topPipes := state.topPipes
    -- collision
   let mut isColliding := false
-  for wall in bottomWalls ++ topWalls do
-    if aabbIntersects player wall then
+  for pipe in bottomPipes ++ topPipes do
+    if aabbIntersects player pipe then
       isColliding := true
       break
 
@@ -132,34 +132,34 @@ private def physicsStep (state : EngineState) : IO EngineState := do
 
   player := { player with y := player.y + speed }
 
-  -- add new walls
-  let mut wallSpawnTimer := state.wallSpawnTimer + physicsDeltaTime
-  if wallSpawnTimer >= state.wallSpawnInterval then
-    let wallHeight : Int32 := (← IO.rand 100 400).toInt32
+  -- add new pipes
+  let mut pipeSpawnTimer := state.pipeSpawnTimer + physicsDeltaTime
+  if pipeSpawnTimer >= state.pipeSpawnInterval then
+    let pipeHeight : Int32 := (← IO.rand 100 400).toInt32
     let gapHeight  : Int32 := (← IO.rand 200 300).toInt32
-    topWalls := topWalls ++ [
-      -- top wall
-      { x := SCREEN_WIDTH.toFloat, y := 0.0, width := 100.0, height := (SCREEN_HEIGHT - (wallHeight + gapHeight)).toFloat },
+    topPipes := topPipes ++ [
+      -- top pipe
+      { x := SCREEN_WIDTH.toFloat, y := 0.0, width := 100.0, height := (SCREEN_HEIGHT - (pipeHeight + gapHeight)).toFloat },
     ]
-    bottomWalls := bottomWalls ++ [
-      { x := SCREEN_WIDTH.toFloat, y := (SCREEN_HEIGHT - wallHeight).toFloat, width := 100.0, height := wallHeight.toFloat }
+    bottomPipes := bottomPipes ++ [
+      { x := SCREEN_WIDTH.toFloat, y := (SCREEN_HEIGHT - pipeHeight).toFloat, width := 100.0, height := pipeHeight.toFloat }
     ]
-    wallSpawnTimer := 0
+    pipeSpawnTimer := 0
 
-  -- move walls to the left
-  bottomWalls := bottomWalls.map (fun wall => { wall with x := wall.x - state.wallSpeed })
-  topWalls := topWalls.map (fun wall => { wall with x := wall.x - state.wallSpeed })
-  -- delete walls that are off screen
-  let newBottomWalls := bottomWalls.filter (fun wall => wall.x + wall.width > -100)
-  let newTopWalls := topWalls.filter (fun wall => wall.x + wall.width > -100)
+  -- move pipes to the left
+  bottomPipes := bottomPipes.map (fun pipe => { pipe with x := pipe.x - state.pipeSpeed })
+  topPipes := topPipes.map (fun pipe => { pipe with x := pipe.x - state.pipeSpeed })
+  -- delete pipes that are off screen
+  let newBottomPipes := bottomPipes.filter (fun pipe => pipe.x + pipe.width > -100)
+  let newTopPipes := topPipes.filter (fun pipe => pipe.x + pipe.width > -100)
 
-  -- only count score of bottom walls to avoid double counting
-  score := score + (bottomWalls.length - newBottomWalls.length)
+  -- only count score of bottom pipes to avoid double counting
+  score := score + (bottomPipes.length - newBottomPipes.length)
 
-  bottomWalls := newBottomWalls
-  topWalls := newTopWalls
+  bottomPipes := newBottomPipes
+  topPipes := newTopPipes
 
-  return { state with player, playerSpeedY := speed, isColliding, bottomWalls, topWalls, wallSpawnTimer, score, highScore }
+  return { state with player, playerSpeedY := speed, isColliding, bottomPipes, topPipes, pipeSpawnTimer, score, highScore }
 
 -- using this article for the fixed time step
 -- https://code.tutsplus.com/how-to-create-a-custom-2d-physics-engine-the-core-engine--gamedev-7493t
@@ -220,7 +220,7 @@ partial def run : IO Unit := do
     SDL.quit
     return
 
-  let wallTexture ← try
+  let pipeTexture ← try
     SDL.loadImageTexture renderer "assets/FlappyBirdAssets/Tiles/Style 1/PipeStyle1.png"
   catch sdlError =>
     IO.println sdlError
@@ -247,8 +247,8 @@ partial def run : IO Unit := do
   let initialState : EngineState := {
     window := window, renderer := renderer
     deltaTime := 0.0, frameStart := 0, running := true
-    player := { x := 100.0, y := 0, width := 50.0, height := 50.0 }
-    playerTexture, font, wallTexture
+    player := { x := 100.0, y := 0, width := 64.0, height := 64.0 }
+    playerTexture, font, pipeTexture
   }
 
   let engineState ← IO.mkRef initialState
