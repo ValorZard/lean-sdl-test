@@ -70,7 +70,7 @@ def renderScene (state : EngineState) : IO Unit := do
   setColor state.renderer { r := 255, g := 0, b := 0 }
   fillRect state.renderer state.player.x.toInt32 state.player.y.toInt32 state.player.width.toInt32 state.player.height.toInt32
 
-  let _ ← SDL.renderTexture state.renderer state.texture 500 150 64 64
+  let _ ← SDL.renderEntireTexture state.renderer state.texture 500 150 64 64
 
   for wall in state.walls do
     setColor state.renderer { r := 0, g := 255, b := 0 }
@@ -81,7 +81,7 @@ def renderScene (state : EngineState) : IO Unit := do
   let textTexture ← SDL.createTextureFromSurface state.renderer textSurface
   let textWidth ← SDL.getTextureWidth textTexture
   let textHeight ← SDL.getTextureHeight textTexture
-  let _ ← SDL.renderTexture state.renderer textTexture 50 50 textWidth textHeight
+  let _ ← SDL.renderEntireTexture state.renderer textTexture 50 50 textWidth textHeight
   pure ()
 
 def physicsFramesPerSecond : Float := 60.0
