@@ -44,6 +44,9 @@ structure EngineState where
   score : Nat := 0
   highScore : Nat := 0
   font : SDL.SDLFont
+  mixer : SDL.SDLMixer
+  track : SDL.SDLTrack
+  audio : SDL.SDLAudio
 
 def SCREEN_WIDTH : Int32 := 1280
 def SCREEN_HEIGHT : Int32 := 720
@@ -126,7 +129,14 @@ private def physicsStep (state : EngineState) : IO EngineState := do
     score := 0
 
   -- game logic
-  if (← isKeyDown .Space) then speed := state.jumpStrength
+  if (← isKeyDown .Space) then
+    speed := state.jumpStrength
+    -- play jump sound
+    match (← SDL.playTrack state.track) with
+    | true => pure ()
+    | false =>
+      IO.println s!"Failed to play track"
+      SDL.quit
 
   speed := speed + state.gravity
 
@@ -244,11 +254,39 @@ partial def run : IO Unit := do
     SDL.quit
     return
 
+  let mixer ← try
+    SDL.createMixer ()
+  catch sdlError =>
+    IO.println sdlError
+    SDL.quit
+    return
+
+  let track ← try
+    SDL.createTrack mixer
+  catch sdlError =>
+    IO.println sdlError
+    SDL.quit
+    return
+
+  let audio ← try
+    SDL.loadAudio mixer "assets/Public_Domain_Jump_Sound-331381.mp3"
+  catch sdlError =>
+    IO.println sdlError
+    SDL.quit
+    return
+
+  match (← SDL.setTrackAudio track audio) with
+  | true => pure ()
+  | false =>
+    IO.println s!"Failed to set track audio"
+    SDL.quit
+    return
+
   let initialState : EngineState := {
     window := window, renderer := renderer
     deltaTime := 0.0, frameStart := 0, running := true
     player := { x := 100.0, y := 0, width := 64.0, height := 64.0 }
-    playerTexture, font, pipeTexture
+    playerTexture, font, pipeTexture, mixer := mixer, track := track, audio := audio,
   }
 
   let engineState ← IO.mkRef initialState

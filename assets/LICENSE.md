@@ -7,3 +7,8 @@ Public Domain
 
 Flappy Bird Assets from:
 https://megacrash.itch.io/flappy-bird-assets
+Creative Commons Zero v1.0 Universal
+
+Jumping sound from:
+https://archive.org/details/Freesound-331381
+(CC0/Public Domain)
